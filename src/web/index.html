@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deal Rescue Queue</title>
+<style>
+  :root { --bg:#0f1420; --card:#1a2233; --line:#2a3650; --txt:#e8eefc; --mut:#93a1bd;
+          --crit:#ff5d5d; --high:#ffa94d; --watch:#ffd43b; --ok:#51cf66; }
+  * { box-sizing:border-box; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  body { background:var(--bg); color:var(--txt); margin:0; padding:24px; }
+  header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px; }
+  h1 { font-size:22px; margin:0; }
+  .sub { color:var(--mut); font-size:13px; margin-bottom:20px; }
+  .banner { padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:20px; border:1px solid var(--line); }
+  .banner.mock { background:#3a2b12; border-color:#8a6d1c; color:#ffe8a3; }
+  .banner.live { background:#12331f; border-color:#2b7a43; color:#b2f2c4; }
+  .srcbar { display:flex; gap:8px; align-items:center; margin-bottom:16px; font-size:13px; color:var(--mut); }
+  .srcbar button { margin-top:0; }
+  .srcbar button.active { background:#1c5c34; }
+  .band { margin-bottom:26px; }
+  .band h2 { font-size:15px; text-transform:uppercase; letter-spacing:1px; color:var(--mut); margin:0 0 10px; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .card.review { border-left:4px solid var(--watch); }
+  .row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .name { font-weight:600; font-size:15px; }
+  .meta { color:var(--mut); font-size:12px; margin:6px 0; }
+  .badge { font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; text-transform:uppercase; }
+  .Critical { background:#3d1518; color:var(--crit); border:1px solid var(--crit); }
+  .High { background:#3a2510; color:var(--high); border:1px solid var(--high); }
+  .Watch { background:#38300f; color:var(--watch); border:1px solid var(--watch); }
+  .Healthy { background:#12331f; color:var(--ok); border:1px solid var(--ok); }
+  .conf { height:6px; background:#0b0f18; border-radius:4px; margin:8px 0; overflow:hidden; }
+  .conf > div { height:100%; background:#5b8def; }
+  .foot { font-size:12px; color:var(--mut); margin-top:8px; }
+  .foot b { color:var(--txt); }
+  button { background:#2f6fed; color:#fff; border:none; border-radius:8px; padding:8px 14px; cursor:pointer; font-size:13px; margin-top:10px; }
+  button:disabled { opacity:.5; cursor:default; }
+  button.confirm { background:#1c5c34; }
+  #preview { background:#101827; border:1px solid var(--line); border-radius:10px; padding:14px; margin-top:20px; font-size:13px; display:none; }
+  #preview td { padding:2px 12px 2px 0; vertical-align:top; }
+  .err { color:var(--crit); }
+  .okmsg { color:var(--ok); font-weight:700; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Deal Rescue Queue</h1>
+  <span class="sub" id="stats"></span>
+</header>
+<div class="sub">HubSpot deals &rarr; Ampersand (M2) &rarr; Jev typed decisions &rarr; human review &rarr; guarded write-back (M3)</div>
+<div class="srcbar">
+  <span>Data source:</span>
+  <button id="btnFixtures">Fixtures (mock CRM)</button>
+  <button id="btnLive">Live HubSpot via Ampersand</button>
+</div>
+<div class="banner" id="modeBanner">Loading…</div>
+<div id="queue"></div>
+<div id="preview"></div>
+
+<script>
+const ACTION_LABEL = {call_now:"Call now", email_followup:"Email follow-up", nurture:"Nurture",
+                      review_close_lost:"Review close-lost", human_review:"Human review"};
+const SOURCE = new URLSearchParams(location.search).get("source") === "live" ? "live" : "fixtures";
+
+document.getElementById("btnFixtures").classList.toggle("active", SOURCE === "fixtures");
+document.getElementById("btnLive").classList.toggle("active", SOURCE === "live");
+document.getElementById("btnFixtures").onclick = () => { location.search = "?source=fixtures"; };
+document.getElementById("btnLive").onclick = () => { location.search = "?source=live"; };
+
+async function load() {
+  const res = await fetch("/api/queue?source=" + SOURCE);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error("HTTP " + res.status + ": " + (err.detail || "queue failed"));
+  }
+  const data = await res.json();
+  const mode = data.items[0]?.decision?.mode || "mock";
+  const banner = document.getElementById("modeBanner");
+  const srcLabel = data.source === "hubspot-live"
+    ? "LIVE HUBSPOT — deals fetched through the Ampersand proxy just now."
+    : "FIXTURES — synthetic HubSpot-style deals on disk.";
+  if (mode === "live") {
+    banner.className = "banner live";
+    banner.textContent = srcLabel + " Decisions from Jev (" + (data.items[0].decision.model || "") + ").";
+  } else {
+    banner.className = "banner mock";
+    banner.textContent = srcLabel + " MOCK MODE — deterministic stand-in, not Jev. Set TYPESAFE_API_KEY for live decisions.";
+  }
+  const totalVar = data.items.reduce((s, i) => s + (i.value_at_risk || 0), 0);
+  document.getElementById("stats").textContent =
+    data.count + " deals · " + data.human_review_count + " need review · $" +
+    Math.round(totalVar).toLocaleString() + " total at risk · " + data.latency_ms + " ms";
+
+  const q = document.getElementById("queue");
+  q.innerHTML = "";
+  if (!data.items.length) {
+    q.innerHTML = '<div class="banner mock">No deals returned for this source.</div>';
+    return;
+  }
+  const sec = document.createElement("div");
+  sec.className = "band";
+  sec.innerHTML = "<h2>Priority queue — ranked by savable value at risk</h2>";
+  const grid = document.createElement("div");
+  grid.className = "grid";
+  data.items.forEach((it, idx) => {
+    const a = it.decision.answers, d = it.deal, r = it.route;
+    const band = a.risk_band.value;
+    const card = document.createElement("div");
+    card.className = "card" + (r.route === "human_review" ? " review" : "");
+    const conf = Math.round((a.risk_band.confidence || 0) * 100);
+    card.innerHTML =
+      '<div class="row"><span class="name">#' + (idx + 1) + ' ' + esc(d.deal_name) + '</span>' +
+      '<span class="badge ' + band + '">' + band + '</span></div>' +
+      '<div class="meta">' + esc(d.company || "") + ' · ' + esc(d.stage || "") +
+      ' · deal size $' + Number(d.amount || 0).toLocaleString() +
+      ' · idle ' + (d.days_since_activity ?? "?") + 'd</div>' +
+      '<div class="foot" style="font-size:14px">$<b>' + Math.round(it.value_at_risk || 0).toLocaleString() +
+      '</b> at risk <span style="color:var(--mut)">(P(loss)=' + Number(a.loss_probability.value).toFixed(2) + ')</span></div>' +
+      '<div class="foot">Next: <b>' + (ACTION_LABEL[a.next_action.value] || a.next_action.value) + '</b></div>' +
+      '<div class="conf"><div style="width:' + conf + '%"></div></div>' +
+      '<div class="foot">Confidence ' + conf + '% · route: <b>' + r.route + '</b><br>' +
+      esc((r.reasons || []).join("; ")) + '</div>' +
+      (r.route === "human_review"
+        ? '<button data-id="' + esc(d.deal_id) + '">Approve write-back (dry-run)</button>' : '');
+    grid.appendChild(card);
+  });
+  sec.appendChild(grid);
+  q.appendChild(sec);
+  q.querySelectorAll("button").forEach(b => b.onclick = () => approve(b.dataset.id, b));
+}
+
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+function fieldRows(obj) {
+  return Object.entries(obj || {}).map(([k, v]) =>
+    "<tr><td><b>" + esc(k) + "</b></td><td>" + esc(v) + "</td></tr>").join("");
+}
+
+/* Step 1 of the guarded write-back: dry-run preview. Nothing is written. */
+async function approve(id, btn) {
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = "Loading preview…";
+  const p = document.getElementById("preview");
+  p.style.display = "block";
+  try {
+    const res = await fetch("/api/review/" + encodeURIComponent(id) + "?source=" + SOURCE,
+      {method:"POST", headers:{"Content-Type":"application/json"},
+       body: JSON.stringify({approved:true, reviewer:"demo-reviewer"})});
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || ("HTTP " + res.status));
+    const w = data.would_write || {};
+    p.innerHTML =
+      '<span class="okmsg">DRY-RUN preview</span> — nothing written yet.<br><br>' +
+      '<table>' + fieldRows(w) + "</table><br>" +
+      (SOURCE === "live"
+        ? '<button class="confirm" id="confirmWrite">✅ Confirm: write these 4 fields to HubSpot</button> ' +
+          '<span style="color:var(--mut)">Confirming sends a real PATCH to this HubSpot deal via the Ampersand proxy.</span>'
+        : '<span style="color:var(--mut)">Fixtures mode: real writes need the Live source — switch to ‘Live HubSpot via Ampersand’ above.</span>');
+    btn.textContent = "Previewed ✓";
+    const c = document.getElementById("confirmWrite");
+    if (c) c.onclick = () => confirmWrite(id, c);
+  } catch (e) {
+    p.innerHTML = '<span class="err">Preview failed: ' + esc(e.message || e) + "</span>";
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
+/* Step 2: the actual guarded write. Only reachable after the dry-run preview,
+   and only on the live source. */
+async function confirmWrite(id, btn) {
+  btn.disabled = true;
+  btn.textContent = "Writing to HubSpot…";
+  const p = document.getElementById("preview");
+  try {
+    const res = await fetch("/api/writeback/" + encodeURIComponent(id) + "?source=live",
+      {method:"POST", headers:{"Content-Type":"application/json"},
+       body: JSON.stringify({approved:true, reviewer:"demo-reviewer", dry_run:false})});
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || ("HTTP " + res.status));
+    if (data.already_written) {
+      p.innerHTML =
+        '<span class="okmsg">⏭️ Skipped — already written</span> by ' +
+        esc(data.existing_reviewer || "?") + " at " +
+        esc(data.existing_reviewed_at || "?") + ". No duplicate write.";
+      return;
+    }
+    p.innerHTML =
+      '<span class="okmsg">✅ Written to HubSpot</span> — deal ' + esc(id) + " now carries:<br><br>" +
+      "<table>" + fieldRows(data.wrote) + "</table><br>" +
+      '<span style="color:var(--mut)">HubSpot updatedAt: ' + esc((data.hubspot || {}).updatedAt || "—") + "</span>";
+  } catch (e) {
+    p.innerHTML = '<span class="err">❌ Write failed: ' + esc(e.message || e) + "</span><br>" +
+      '<span style="color:var(--mut)">Most common cause: one of the 4 drq_* properties is missing in HubSpot Settings → Properties → Deal properties.</span>';
+    btn.disabled = false;
+    btn.textContent = "✅ Confirm: write these 4 fields to HubSpot";
+  }
+}
+
+load().catch(e => {
+  document.getElementById("modeBanner").className = "banner mock";
+  document.getElementById("modeBanner").innerHTML = '<span class="err">Could not load queue: ' + esc(e.message || e) + '</span>';
+});
+</script>
+</body>
+</html>

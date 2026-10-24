@@ -1,0 +1,12 @@
+Deal name,Amount,Close date,Deal stage,Description
+"Acme Corp — Platform renewal",48000,2026-11-15,Decision Maker Bought-In,"Champion confirmed budget approved, paperwork with legal for final signature."
+"Globex — New logo",18000,2026-11-30,Presentation Scheduled,"Budget approved, but security review is still pending."
+"Initech — Expansion",32000,2026-12-05,Presentation Scheduled,"They went with a competitor — pricing was the deciding factor."
+"Umbrella Health — Pilot",12000,,Appointment Scheduled,
+"Hooli — Enterprise",95000,2026-12-12,Presentation Scheduled,"Verbal yes from CTO, very excited about the rollout."
+"Stark Industries — Renewal",120000,2026-10-31,Decision Maker Bought-In,"Procurement added new infosec requirements; legal redlines in progress."
+"Wayne Enterprises — New logo",25000,,Qualified To Buy,"Our champion left the company last month."
+"Pied Piper — Team plan",6000,,Appointment Scheduled,"Small team, wants to start with 10 seats and expand next quarter."
+"Massive Dynamic — Platform",210000,2026-12-20,Decision Maker Bought-In,"Legal redlines on DPA; procurement looped in."
+"Soylent Corp — Pilot",9000,,Qualified To Buy,
+"Umbrella Corp — Q4 close",150000,2026-10-16,Decision Maker Bought-In,"Customer asked for a 15% discount to sign before quarter end."

@@ -1,0 +1,26 @@
+# Deal Rescue Queue — Ampersand integration manifest (Milestone 2)
+#
+# Pattern: PROXY (not read+destination webhooks).
+# The FastAPI backend calls HubSpot on demand through
+# https://proxy.withampersand.com, replacing the https://api.hubapi.com base
+# URL and adding the x-amp-* headers. No destination, webhook receiver, or
+# public URL (ngrok) is needed — a refresh pulls live deals synchronously,
+# which is also better for the demo.
+#
+# M3 write-back will also go through the proxy
+# (PATCH /crm/v3/objects/deals/{id}), gated by human approval in
+# src/policy.py — never automatic. Allowlisted fields only:
+# drq_risk_band, drq_recommended_action, drq_reviewed_at, drq_reviewer.
+#
+# Verified against:
+#   https://docs.withampersand.com/proxy-actions
+#   https://github.com/amp-labs/samples/blob/main/hubspot/amp.yaml
+# (11 Oct 2026)
+
+specVersion: 1.0.0
+integrations:
+  - name: deal-rescue-hubspot
+    displayName: Deal Rescue Queue — HubSpot
+    provider: hubspot
+    proxy:
+      enabled: true
